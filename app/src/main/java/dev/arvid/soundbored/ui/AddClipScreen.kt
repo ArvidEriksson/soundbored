@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
@@ -77,6 +78,9 @@ fun AddClipScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(padding)
+                // The app draws edge to edge, so the keyboard has to shrink the scroll
+                // viewport itself — otherwise it covers whichever field is being typed in.
+                .imePadding()
                 .verticalScroll(rememberScrollState())
                 .padding(20.dp),
         ) {

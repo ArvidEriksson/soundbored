@@ -1,7 +1,6 @@
 package dev.arvid.soundbored.ui
 
 import android.app.Application
-import android.media.MediaPlayer
 import android.net.Uri
 import android.util.Log
 import androidx.compose.runtime.getValue
@@ -14,6 +13,7 @@ import androidx.lifecycle.viewModelScope
 import dev.arvid.soundbored.audio.AudioFetcher
 import dev.arvid.soundbored.audio.AudioTrimmer
 import dev.arvid.soundbored.audio.LocalAudioImporter
+import dev.arvid.soundbored.audio.PreviewPlayer
 import dev.arvid.soundbored.audio.Waveform
 import dev.arvid.soundbored.data.Clip
 import dev.arvid.soundbored.data.ClipRepository
@@ -89,7 +89,7 @@ class AddClipViewModel(application: Application) : AndroidViewModel(application)
     private var sourceFile: File? = null
     private var loadJob: Job? = null
     private var waveformJob: Job? = null
-    private var player: MediaPlayer? = null
+    private val preview = PreviewPlayer()
     private var previewJob: Job? = null
 
     fun onUrlChange(value: String) {
@@ -387,7 +387,7 @@ class AddClipViewModel(application: Application) : AndroidViewModel(application)
         loadJob?.cancel()
         waveformJob?.cancel()
         previewJob?.cancel()
-        releasePlayer()
+        preview.release()
         sourceFile?.delete()
         super.onCleared()
     }
@@ -416,43 +416,23 @@ class AddClipViewModel(application: Application) : AndroidViewModel(application)
     }
 
     private fun preparePlayer(file: File) {
-        releasePlayer()
-        player = runCatching {
-            MediaPlayer().apply {
-                setDataSource(file.absolutePath)
-                prepare()
-            }
-        }.onFailure { Log.e(TAG, "Preview player failed", it) }.getOrNull()
+        preview.prepare(file)
     }
 
     private fun releasePlayer() {
-        runCatching { player?.release() }
-        player = null
+        preview.release()
     }
 
     private fun startPreview() {
-        val mediaPlayer = player ?: return
         previewJob?.cancel()
         isPreviewing = true
         previewJob = viewModelScope.launch {
-            runCatching {
-                mediaPlayer.seekTo(startMs, MediaPlayer.SEEK_CLOSEST)
-                mediaPlayer.start()
-            }.onFailure {
-                isPreviewing = false
-                return@launch
-            }
-            while (isPreviewing) {
-                val position = runCatching { mediaPlayer.currentPosition.toLong() }.getOrDefault(endMs)
-                playheadMs = position
-                if (position >= endMs) break
-                // The source file has no fades baked in, so ride the volume to preview them.
-                val gain = gainAt(position)
-                runCatching { mediaPlayer.setVolume(gain, gain) }
-                delay(25)
-            }
-            runCatching { if (mediaPlayer.isPlaying) mediaPlayer.pause() }
-            runCatching { mediaPlayer.setVolume(1f, 1f) }
+            preview.play(
+                startMs = startMs,
+                endMs = endMs,
+                gainAt = ::gainAt,
+                onPosition = { playheadMs = it },
+            )
             isPreviewing = false
             playheadMs = -1L
         }
@@ -468,8 +448,7 @@ class AddClipViewModel(application: Application) : AndroidViewModel(application)
         previewJob?.cancel()
         previewJob = null
         playheadMs = -1L
-        runCatching { if (player?.isPlaying == true) player?.pause() }
-        runCatching { player?.setVolume(1f, 1f) }
+        preview.stop()
     }
 
     companion object {

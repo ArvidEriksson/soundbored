@@ -38,7 +38,16 @@ android {
     }
 
     buildTypes {
+        // The debug build installs alongside a released one, under its own id and name, so
+        // development never replaces or uninstalls the APK you actually use.
+        debug {
+            applicationIdSuffix = ".debug"
+            versionNameSuffix = "-debug"
+            resValue("string", "app_name", "Soundbored Debug")
+        }
+
         release {
+            resValue("string", "app_name", "Soundbored")
             signingConfig = signingConfigs.findByName("release")
             isMinifyEnabled = false
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
@@ -53,6 +62,7 @@ android {
 
     buildFeatures {
         compose = true
+        resValues = true
     }
 
     packaging {
