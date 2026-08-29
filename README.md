@@ -102,3 +102,18 @@ those clips joining the first board.
   works later. If the user removes the file or revokes access, editing reports it instead of
   silently failing.
 - Downloading copyrighted audio is on you and your jurisdiction; the app just moves bytes.
+
+## License
+
+Soundbored — cut YouTube clips and local audio into soundboard buttons.
+Copyright (C) 2026 Arvid Eriksson.
+
+This program is free software: you can redistribute it and/or modify it under the terms of the
+GNU General Public License as published by the Free Software Foundation, either version 3 of the
+License, or (at your option) any later version. It is distributed in the hope that it will be
+useful, but WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS
+FOR A PARTICULAR PURPOSE. See the [LICENSE](LICENSE) file for the full text.
+
+GPL-3.0 rather than something permissive because the app links
+[NewPipeExtractor](https://github.com/TeamNewPipe/NewPipeExtractor), which is GPL-3.0; the
+combined work carries those terms.
