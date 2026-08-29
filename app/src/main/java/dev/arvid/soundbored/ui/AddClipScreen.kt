@@ -107,26 +107,13 @@ fun AddClipScreen(
 
 @Composable
 private fun SourceChooser(viewModel: AddClipViewModel, onPickFile: () -> Unit) {
-    Text("Where is the sound from?", style = MaterialTheme.typography.titleMedium)
     Text(
-        text = "Either way you get the same waveform editor, and the cut audio is stored on " +
-            "this device.",
-        style = MaterialTheme.typography.bodyMedium,
-        color = MaterialTheme.colorScheme.onSurfaceVariant,
-        modifier = Modifier.padding(top = 8.dp, bottom = 16.dp),
+        text = "Where is the sound from?",
+        style = MaterialTheme.typography.titleMedium,
+        modifier = Modifier.padding(bottom = 16.dp),
     )
-    SourceOption(
-        title = "YouTube link",
-        description = "Paste a link, or share one into Soundbored from the YouTube app.",
-        icon = Icons.Default.PlayArrow,
-        onClick = viewModel::chooseYoutube,
-    )
-    SourceOption(
-        title = "Audio file on this device",
-        description = "Import an MP3, M4A, WAV, OGG or FLAC and cut it the same way.",
-        icon = Icons.Default.Add,
-        onClick = onPickFile,
-    )
+    SourceOption("YouTube link", Icons.Default.PlayArrow, viewModel::chooseYoutube)
+    SourceOption("Audio file on this device", Icons.Default.Add, onPickFile)
     viewModel.error?.let { message ->
         Text(
             text = message,
@@ -138,12 +125,7 @@ private fun SourceChooser(viewModel: AddClipViewModel, onPickFile: () -> Unit) {
 }
 
 @Composable
-private fun SourceOption(
-    title: String,
-    description: String,
-    icon: ImageVector,
-    onClick: () -> Unit,
-) {
+private fun SourceOption(title: String, icon: ImageVector, onClick: () -> Unit) {
     Surface(
         onClick = onClick,
         shape = RoundedCornerShape(16.dp),
@@ -157,35 +139,21 @@ private fun SourceOption(
             modifier = Modifier.padding(16.dp),
         ) {
             Icon(icon, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
-            Column(Modifier.padding(start = 16.dp)) {
-                Text(title, style = MaterialTheme.typography.titleSmall)
-                Text(
-                    text = description,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
+            Text(
+                text = title,
+                style = MaterialTheme.typography.titleSmall,
+                modifier = Modifier.padding(start = 16.dp),
+            )
         }
     }
 }
 
 @Composable
 private fun UrlInput(viewModel: AddClipViewModel) {
-    Text(
-        text = "Paste a YouTube link",
-        style = MaterialTheme.typography.titleMedium,
-    )
-    Text(
-        text = "The audio is downloaded once, cut to the interval you pick, and stored on " +
-            "this device. Pressing the button later never touches the network.",
-        style = MaterialTheme.typography.bodyMedium,
-        color = MaterialTheme.colorScheme.onSurfaceVariant,
-        modifier = Modifier.padding(top = 8.dp, bottom = 16.dp),
-    )
     OutlinedTextField(
         value = viewModel.url,
         onValueChange = viewModel::onUrlChange,
-        label = { Text("youtube.com/watch?v=…") },
+        label = { Text("YouTube link") },
         singleLine = true,
         keyboardOptions = KeyboardOptions(
             keyboardType = KeyboardType.Uri,
@@ -377,12 +345,6 @@ private fun Editor(viewModel: AddClipViewModel, audio: LoadedAudio, onSaved: () 
             .fillMaxWidth()
             .padding(top = 12.dp, bottom = 24.dp),
     ) { Text(if (viewModel.editing != null) "Save changes" else "Add to board") }
-
-    Text(
-        text = "Clips are capped at ${AddClipViewModel.MAX_CLIP_MS / 1000} seconds.",
-        style = MaterialTheme.typography.bodySmall,
-        color = MaterialTheme.colorScheme.onSurfaceVariant,
-    )
 }
 
 @Composable

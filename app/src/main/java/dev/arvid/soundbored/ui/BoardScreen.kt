@@ -100,7 +100,7 @@ fun BoardScreen(viewModel: BoardViewModel, onAdd: () -> Unit, onEdit: (Clip) -> 
         },
     ) { padding ->
         if (clips.isEmpty()) {
-            EmptyBoard(boards.size > 1, Modifier.padding(padding))
+            EmptyBoard(Modifier.padding(padding))
         } else {
             LazyVerticalGrid(
                 columns = GridCells.Adaptive(minSize = 128.dp),
@@ -177,7 +177,6 @@ fun BoardScreen(viewModel: BoardViewModel, onAdd: () -> Unit, onEdit: (Clip) -> 
         AlertDialog(
             onDismissRequest = { deleteClip = null },
             title = { Text("Delete \"${clip.name}\"?") },
-            text = { Text("The saved audio file will be removed from this device.") },
             confirmButton = {
                 Button(onClick = { viewModel.delete(clip); deleteClip = null }) { Text("Delete") }
             },
@@ -210,14 +209,9 @@ fun BoardScreen(viewModel: BoardViewModel, onAdd: () -> Unit, onEdit: (Clip) -> 
             onDismissRequest = { deleteBoard = false },
             title = { Text("Delete \"${activeBoard.name}\"?") },
             text = {
-                Text(
-                    if (clips.isEmpty()) {
-                        "This board is empty."
-                    } else {
-                        "Its ${clips.size} sound${if (clips.size == 1) "" else "s"} will be " +
-                            "deleted from this device too."
-                    }
-                )
+                if (clips.isNotEmpty()) {
+                    Text("Its ${clips.size} sound${if (clips.size == 1) "" else "s"} go too.")
+                }
             },
             confirmButton = {
                 Button(onClick = { viewModel.deleteBoard(activeBoard.id); deleteBoard = false }) {
@@ -374,22 +368,14 @@ private fun SheetAction(label: String, onClick: () -> Unit) {
 }
 
 @Composable
-private fun EmptyBoard(hasOtherBoards: Boolean, modifier: Modifier = Modifier) {
+private fun EmptyBoard(modifier: Modifier = Modifier) {
     Box(modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-        Column(
-            horizontalAlignment = Alignment.CenterHorizontally,
+        Text(
+            text = "No sounds on this board",
+            style = MaterialTheme.typography.titleLarge,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            textAlign = TextAlign.Center,
             modifier = Modifier.padding(32.dp),
-        ) {
-            Text("No sounds on this board", style = MaterialTheme.typography.titleLarge)
-            Text(
-                text = "Add one from a YouTube link or an audio file on this device, pick the " +
-                    "moment you want, and it becomes a button here." +
-                    if (hasOtherBoards) " Your other boards are in the menu up top." else "",
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                textAlign = TextAlign.Center,
-                modifier = Modifier.padding(top = 8.dp),
-            )
-        }
+        )
     }
 }
