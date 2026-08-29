@@ -271,7 +271,7 @@ class AddClipViewModel(application: Application) : AndroidViewModel(application)
         startMs = start
         endMs = end
         clampFades()
-        if (isPreviewing) restartPreview()
+        if (isPreviewing) stopPreview()
     }
 
     fun nudgeStart(deltaMs: Long) = updateRange(startMs + deltaMs, endMs)
@@ -284,7 +284,7 @@ class AddClipViewModel(application: Application) : AndroidViewModel(application)
         val start = (startMs + deltaMs).coerceIn(0L, (duration - length).coerceAtLeast(0L))
         startMs = start
         endMs = start + length
-        if (isPreviewing) restartPreview()
+        if (isPreviewing) stopPreview()
     }
 
     fun setFadeIn(ms: Long) {
@@ -438,17 +438,12 @@ class AddClipViewModel(application: Application) : AndroidViewModel(application)
         }
     }
 
-    private fun restartPreview() {
-        stopPreview()
-        startPreview()
-    }
-
     private fun stopPreview() {
         isPreviewing = false
         previewJob?.cancel()
         previewJob = null
         playheadMs = -1L
-        preview.stop()
+        preview.pause()
     }
 
     companion object {

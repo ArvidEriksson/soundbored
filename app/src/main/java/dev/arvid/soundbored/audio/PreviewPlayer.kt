@@ -3,9 +3,11 @@ package dev.arvid.soundbored.audio
 import android.media.AudioAttributes
 import android.media.AudioFormat
 import android.media.AudioTrack
+import android.os.SystemClock
 import android.util.Log
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.ensureActive
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.withContext
 import java.io.File
 import kotlin.coroutines.coroutineContext
@@ -19,16 +21,21 @@ import kotlin.math.max
  * ignored outright and playback starts from the beginning of the file. Decoding gives a
  * sample-exact start, and it is the same decode the trimmer uses, so the preview is literally
  * what will be saved.
+ *
+ * Every part of that — decode included — runs off the main thread, and the audio track is owned
+ * by the playing coroutine alone: stopping cancels that coroutine, which then releases it.
  */
 class PreviewPlayer {
 
     private var source: File? = null
     private var cached: PcmDecoder.Pcm? = null
     private var cachedRange: Pair<Long, Long>? = null
+
+    @Volatile
     private var track: AudioTrack? = null
 
     fun prepare(file: File): Boolean {
-        stop()
+        pause()
         source = file
         cached = null
         cachedRange = null
@@ -41,77 +48,82 @@ class PreviewPlayer {
         endMs: Long,
         gainAt: (positionMs: Long) -> Float = { 1f },
         onPosition: (positionMs: Long) -> Unit = {},
-    ) {
-        val file = source ?: return
+    ) = withContext(Dispatchers.IO) {
+        val file = source ?: return@withContext
         val pcm = try {
             decoded(file, startMs, endMs)
         } catch (e: Exception) {
             Log.e(TAG, "Could not decode the preview range", e)
-            return
+            return@withContext
         }
-        if (pcm.frameCount == 0) return
+        if (pcm.frameCount == 0) return@withContext
 
-        withContext(Dispatchers.Default) {
-            val audioTrack = openTrack(pcm) ?: return@withContext
-            track = audioTrack
-            val scratch = ShortArray(CHUNK_FRAMES * pcm.channels)
-            try {
-                audioTrack.play()
-                var frame = 0
-                while (frame < pcm.frameCount) {
-                    coroutineContext.ensureActive()
-                    val frames = minOf(CHUNK_FRAMES, pcm.frameCount - frame)
-                    val positionMs = startMs + frame * 1000L / pcm.sampleRate
+        val audioTrack = openTrack(pcm) ?: return@withContext
+        track = audioTrack
+        val scratch = ShortArray(CHUNK_FRAMES * pcm.channels)
+        try {
+            audioTrack.play()
+            val total = pcm.frameCount * pcm.channels
+            var sample = 0
+            while (sample < total && coroutineContext.isActive) {
+                val count = minOf(scratch.size, total - sample)
+                val positionMs = startMs + (sample / pcm.channels) * 1000L / pcm.sampleRate
 
-                    // Fades are not in the source file, so they are applied on the way out.
-                    val gain = gainAt(positionMs)
-                    val offset = frame * pcm.channels
-                    val count = frames * pcm.channels
-                    for (i in 0 until count) {
-                        scratch[i] = (pcm.samples[offset + i] * gain).toInt().toShort()
-                    }
-
-                    val written = audioTrack.write(scratch, 0, count, AudioTrack.WRITE_BLOCKING)
-                    if (written < 0) break
-                    frame += written / pcm.channels
-
-                    val rendered = audioTrack.playbackHeadPosition.toLong()
-                    onPosition(startMs + rendered * 1000L / pcm.sampleRate)
+                // Fades are not in the source file, so they are applied on the way out.
+                val gain = gainAt(positionMs)
+                for (i in 0 until count) {
+                    scratch[i] = (pcm.samples[sample + i] * gain).toInt().toShort()
                 }
-                // Let whatever is still buffered finish before the track goes away.
-                while (audioTrack.playbackHeadPosition < pcm.frameCount) {
-                    coroutineContext.ensureActive()
-                    onPosition(
-                        startMs + audioTrack.playbackHeadPosition.toLong() * 1000L / pcm.sampleRate
-                    )
-                    kotlinx.coroutines.delay(POLL_MS)
+
+                // Non-blocking, so cancelling the preview is felt within a few milliseconds
+                // rather than after however much audio is already queued.
+                val written = audioTrack.write(scratch, 0, count, AudioTrack.WRITE_NON_BLOCKING)
+                if (written < 0) break
+                if (written == 0) {
+                    delay(POLL_MS)
+                    continue
                 }
-                onPosition(endMs)
-            } finally {
-                runCatching { audioTrack.pause() }
-                runCatching { audioTrack.flush() }
-                runCatching { audioTrack.release() }
-                if (track === audioTrack) track = null
+                sample += written
+                onPosition(startMs + renderedMs(audioTrack, pcm))
             }
+
+            // Let what is already queued finish, but never wait longer than it could take.
+            val queuedFrames = sample / pcm.channels
+            val deadline = SystemClock.elapsedRealtime() + (endMs - startMs) + DRAIN_GRACE_MS
+            while (coroutineContext.isActive &&
+                audioTrack.playbackHeadPosition < queuedFrames &&
+                SystemClock.elapsedRealtime() < deadline
+            ) {
+                onPosition(startMs + renderedMs(audioTrack, pcm))
+                delay(POLL_MS)
+            }
+            if (coroutineContext.isActive) onPosition(endMs)
+        } catch (e: IllegalStateException) {
+            Log.w(TAG, "Audio track went away mid-preview", e)
+        } finally {
+            track = null
+            runCatching { audioTrack.pause() }
+            runCatching { audioTrack.flush() }
+            runCatching { audioTrack.release() }
         }
     }
 
-    fun stop() {
-        val audioTrack = track ?: return
-        track = null
-        runCatching { audioTrack.pause() }
-        runCatching { audioTrack.flush() }
-        runCatching { audioTrack.release() }
+    /** Silences playback straight away; the playing coroutine still owns and releases the track. */
+    fun pause() {
+        runCatching { track?.pause() }
     }
 
     fun release() {
-        stop()
+        pause()
         source = null
         cached = null
         cachedRange = null
     }
 
-    /** Decoding a range takes a moment, so a repeated press of the same selection is instant. */
+    private fun renderedMs(audioTrack: AudioTrack, pcm: PcmDecoder.Pcm): Long =
+        audioTrack.playbackHeadPosition.toLong() * 1000L / pcm.sampleRate
+
+    /** Decoding takes a moment, so pressing play again on the same selection is instant. */
     private suspend fun decoded(file: File, startMs: Long, endMs: Long): PcmDecoder.Pcm {
         cached?.let { if (cachedRange == startMs to endMs) return it }
         val pcm = PcmDecoder.decodeRegion(file, startMs * 1000L, endMs * 1000L)
@@ -153,6 +165,7 @@ class PreviewPlayer {
     private companion object {
         const val TAG = "PreviewPlayer"
         const val CHUNK_FRAMES = 1024
-        const val POLL_MS = 20L
+        const val POLL_MS = 5L
+        const val DRAIN_GRACE_MS = 500L
     }
 }
